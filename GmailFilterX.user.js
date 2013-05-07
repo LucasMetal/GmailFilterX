@@ -9,15 +9,28 @@
 // @grant       none
 // ==/UserScript==
 
+/*
+Notes:
+- Works only when Gmail is in English (must say "edit" to edit a filter)
+- Filters that should be included in the dropDownList, must include the following string (including the quotes)
+	in the "Doesn't have" field:
+		"filterName:<FilterName>"
+		
+	<FilterName>: should be replaced by the wanted filter name, can contain spaces. 
+		E.g.: "filterName:Friends Emails"
+*/
+
 //Patch jQuery
 this.$ = this.jQuery = jQuery.noConflict(true);
 
-window.top.lucas = this; //Just for testing
-var that = this; //Closure
-this.gmailApi = new USO.Gmail();
+// Inject the script environment in the window object, just for testing
+window.top.GmailFilterX = this; 
 
-//Recursion is fun! We do not like for loops anymore
+var that = this; //Closure
+this.gmailApi = new USO.Gmail(); //Initialize Gmail API
+
 //TODO: Refactor this stolen shit
+//Recursion is fun! We do not like for loops anymore
 function get_useremail_pos(index, user_email) {
 	if(window.top.GLOBALS[index] == user_email) {
 	   return index; 
@@ -64,6 +77,7 @@ this.set_gmail_params = function() {
 	this.gmail_params = gmail_params;        
 };
 
+// When the Gmail API finish loading we configure the script
 this.gmailApi.on('loaded:api', function (api) {
 	
 	//console.log ("GmailAPI Loaded");	
@@ -79,53 +93,54 @@ this.gmailApi.on('loaded:api', function (api) {
 	
 	//console.log(settingsRequestUrl);
 	
-	//Hago un post a la URL de las settings, para traer la config y poder parsear los nombres de los filtros
+	// Make a post to the settings URL, to get the config and be able to parse the filters names
 	$.post(settingsRequestUrl, function (data){
 		
 		console.log ("Success getting Settings!");
 		//console.log (data);
 				
+		// Regex vars, to match the filter names
 		var filterMatch = null,
-			filterRegex = /-{\\\"filterTitle:([\w\s]+)\\\"}/g;			
+			filterRegex = /-{\\\"filterName:([\w\s]+)\\\"}/g;			
 		
-		//Ejecuto la regular expression y me guardo los nombres de los filtros configurados (que tengan filterTitle)
+		// Execute the Regex and save the configured filters names (the ones that have "filterName")
 		while ( filterMatch = filterRegex.exec(data)){
-			filterNames.push (filterMatch[1]); //filterMatch[0]: texto completo, filterMatch[1]: group match
+			filterNames.push (filterMatch[1]); //filterMatch[0]: full text, filterMatch[1]: group match
 		}
 					
 		//console.log (filterNames);
 		
-	//Debo indicar que el server retorna "text" porque sino intenta parsearlo como Json y explota
+	// Must indicate that server returns "text", otherwise it tris to parse as Json and explodes
 	}, "text").fail(function(error, jqXHR ) { 
 		console.log ("Error getting Settings!");
 		console.log(error); 
 		console.log(jqXHR ); 		
 	});
 	
-	//Me attacho al momento de ver un mail
+	// Attach to the "viewing a message" event
 	that.gmailApi.on("message:view", function (message){
 			
 		//console.log ("message:view");
 		//console.log ($(gmailApi.view));		
-		//De acá podemos sacar más datos, tal vez para meter el botón en otro lado
+		// From the message object we could get more data, maybe to locate the dropDownList in another place
 		//console.log(message);
 		
-		//Obtengo la dirección del from del objeto message que vino de la API de Gmail
+		// Get the "from" address from the message object that we received from the Gmail API
 		var fromEmailAddress = message.getFromAddress();
 				
-		//Creo un combo en el header con todos los nombres de los filtros
+		// Create a dropDownList in the email header, filled with the filters names
 		var selectHtml = "<select style='font-size:80%'><option value=''>Add to filter...</option>";
 		for (var i=0; i< filterNames.length; i++){
 			selectHtml+= "<option value='" + filterNames[i] + "'>" + filterNames[i] + "</option>";
 		}
 		selectHtml+= "</select>";
 
-		//Creo el objeto SELECT y lo inserto en el DOM al lado de los labels del mensaje
-		//TODO: Validar no insertarlo más de una vez (ahora sucede cuando la conversación tiene varios mails)
+		// Create the SELECT object and insert it in the DOM (right beside the labels of the email)
+		// TODO: Validate not to insert it more than once (happens now when the conversation has more than one email)
 		var $selectHtml = $(selectHtml);
 		$(that.gmailApi.view).find("h1.ha").append($selectHtml);
 				
-		//Attacho un eventHandler al change del select, para disparar ahí la edición del filtro
+		// Attach an eventHandler to the select change event, to fire there the edition of the filter
 		$selectHtml.on("change", function (event){
 			if (filterName = $(this).val()){
 				that.editFilter (filterName, fromEmailAddress);
@@ -135,52 +150,43 @@ this.gmailApi.on('loaded:api', function (api) {
 	});
 });
 
-
+// In case of an error when loading the Gmail API
 this.gmailApi.on('error', function (error) {
 
 	console.log ("GmailAPI Error:");
 	console.log (error);
 });
 
-/*
-this.test = function (){
-	
-	//this.editFilter ("JSL", "TEST@TEST.com");
-	//console.log($("h1.ha").text());
-	
-	//console.log (gmailApi.gmail.api);
-};
-//*/
-
 this.editFilter = function (filterName, valueToAdd){
 
-	console.log ("editFilter: " + filterName + ": " + valueToAdd);
+	//console.log ("editFilter: " + filterName + ": " + valueToAdd);
 
 	var	$fromTxt = null;
 	
-	//Vamos a las settings
+	// Navigate to the settings page
 	window.top.location.hash = "settings/filters";
 
-	//Esperamos que cargue el HTML de las settings
+	// Wait for the settings HTML to load
 	setTimeout ( function(){
-		//Clickeamos en "Edit" del filtro correspondiente (según el valor recibido de la selección del user)		
+		// Click in the "Edit" link of the corresponding filter (depending on the value received from the user selection)
+		// TODO: Find a way to make it international, now works only in english (because of the "edit" text)
 		$(window.top.document).find("tr:contains('filterTitle:" + filterName + "') span:contains('edit')").click();
 			
-		//Esperamos que cargue el HTML del editor de filtros	
+		// Wait for the filter editor HTML to load
 		setTimeout ( function(){
-			//Obtenemos el campo correspondiente (usando la class, no hay otra forma)
+			// Get the "from" field using the CSS class (there is no other way :( )
 			var $fromTxt = $(window.top.document).find(".ZH.nr.aQa");
 			
-			//Formo el valor a insertar y lo inserto
-			var completeValueToAdd = " OR " + valueToAdd; //Agrego un OR a la condición también
+			// Generate the value to add and add it			
+			var completeValueToAdd = " OR " + valueToAdd; // Add an OR to the condition too
 			$fromTxt.val( $fromTxt.val() + completeValueToAdd);			
 			
-			//Selecciono el valor agregado en el textbox
+			// Select the text we have just added to the textbox			
 			$fromTxt[0].selectionStart = $fromTxt.val().length - completeValueToAdd.length;
 			$fromTxt[0].selectionEnd = $fromTxt.val().length;
 			$fromTxt.focus();
 						
-			console.log ("filterEdited!");
+			//console.log ("filterEdited!");
 			
 			//TODO: Return to Inbox (or to the email that the user was viewing)
 			
@@ -189,4 +195,4 @@ this.editFilter = function (filterName, valueToAdd){
 	//*/
 };	
 	
-console.log ("LucasMetal Test Loaded from: " + window.location);
+console.log ("Gmail FilterX Loaded from: " + window.location);
