@@ -3,7 +3,7 @@
 // @namespace   www.lucasmetal.com.ar
 // @description Allows to quickly add an email to the "from" field of an existing filter.
 // @include     https://mail.google.com/*
-// @version     1
+// @version     0.1
 // @require     https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @require    	http://userscripts.org/scripts/source/56812.user.js
 // @grant       none
