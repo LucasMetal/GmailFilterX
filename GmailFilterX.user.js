@@ -170,7 +170,7 @@ this.editFilter = function (filterName, valueToAdd){
 	setTimeout ( function(){
 		// Click in the "Edit" link of the corresponding filter (depending on the value received from the user selection)
 		// TODO: Find a way to make it international, now works only in english (because of the "edit" text)
-		$(window.top.document).find("tr:contains('filterTitle:" + filterName + "') span:contains('edit')").click();
+		$(window.top.document).find("tr:contains('filterName:" + filterName + "') span:contains('edit')").click();
 			
 		// Wait for the filter editor HTML to load
 		setTimeout ( function(){
